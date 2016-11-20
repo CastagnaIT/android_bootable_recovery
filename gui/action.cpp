@@ -1056,6 +1056,7 @@ int GUIAction::wipe(std::string arg)
 	DataManager::SetValue("tw_partition", arg);
 
 	int ret_val = false;
+	bool rewriteTWRPSettings = false;
 
 	if (simulate) {
 		simulate_progress_bar();
@@ -1069,9 +1070,11 @@ int GUIAction::wipe(std::string arg)
 		else if (arg == "dalvik")
 			ret_val = PartitionManager.Wipe_Dalvik_Cache();
 		else if (arg == "DATAMEDIA") {
+			rewriteTWRPSettings = true;
 			ret_val = PartitionManager.Format_Data();
 		} else if (arg == "INTERNAL") {
 			int has_datamedia;
+			rewriteTWRPSettings = true;
 
 			DataManager::GetValue(TW_HAS_DATA_MEDIA, has_datamedia);
 			if (has_datamedia) {
@@ -1115,6 +1118,7 @@ int GUIAction::wipe(std::string arg)
 							skip = true;
 						}
 					} else if (wipe_path == "INTERNAL") {
+						rewriteTWRPSettings = true;
 						if (!PartitionManager.Wipe_Media_From_Data()) {
 							ret_val = false;
 							break;
@@ -1139,21 +1143,28 @@ int GUIAction::wipe(std::string arg)
 			}
 		} else
 			ret_val = PartitionManager.Wipe_By_Path(arg);
-#ifndef TW_OEM_BUILD
-		if (arg == DataManager::GetSettingsStoragePath()) {
+
+		if (rewriteTWRPSettings) {
 			// If we wiped the settings storage path, recreate the TWRP folder and dump the settings
 			string Storage_Path = DataManager::GetSettingsStoragePath();
 
+			LOGINFO("Rewriting TWRP settings. Called from: %s\n", arg.c_str());
+			gui_print("Mount media path for recreate TWRP settings. %s\n", Storage_Path.c_str());
+
 			if (PartitionManager.Mount_By_Path(Storage_Path, true)) {
-				LOGINFO("Making TWRP folder and saving settings.\n");
-				Storage_Path += "/TWRP";
-				mkdir(Storage_Path.c_str(), 0777);
+				string TWRP_Path = Storage_Path + "/TWRP";
+				LOGINFO("Making TWRP folder. %s\n", TWRP_Path.c_str());
+				
+				mkdir(Storage_Path.c_str(), 0770);
+				mkdir(TWRP_Path.c_str(), 0775);
+				
 				DataManager::Flush();
+				gui_print("TWRP settings saved.\n");
 			} else {
 				LOGERR("Unable to recreate TWRP folder and save settings.\n");
 			}
 		}
-#endif
+
 	}
 	PartitionManager.Update_System_Details();
 	if (ret_val)
